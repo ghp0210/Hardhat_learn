@@ -94,7 +94,7 @@ contract SimpleSwap {
     // 代币互换
     function swap(address fromToken, uint256 amountIn) external {
         require((fromToken == tokenA || fromToken == tokenB) && tokenA != tokenB, "Invalid token");
-        
+        require(amountIn > 0, "Amount must be positive");
         address toToken = fromToken == tokenA ? tokenB : tokenA;
         
         // 使用恒定乘积公式计算兑换数量

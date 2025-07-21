@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
-contract TokenB {
-    string public name = "TokenB";
-    string public symbol = "TKB";
-    // uint8 public decimals = 18;
-    //uint8 public decimals = 2;
-    uint256 public totalSupply = 10000;
 
+contract MyToken {
+    string public name;
+    string public symbol;
+    
+    //uint8 public decimals = 2;
+    address public owner;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-   constructor(uint256 initialSupply) {
-        balanceOf[msg.sender] = totalSupply;
+    constructor(string memory _name, string memory _symbol, uint256 initialSupply) {
+        name = _name;
+        symbol = _symbol;
+        balanceOf[msg.sender] = initialSupply;
+        
     }
 
     function transfer(address to, uint256 value) public returns (bool success) {
