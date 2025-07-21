@@ -4,8 +4,7 @@ pragma solidity ^0.8.28;
 contract MyToken {
     string public name;
     string public symbol;
-    
-    //uint8 public decimals = 2;
+    uint256 public totalSupply;
     address public owner;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -16,6 +15,7 @@ contract MyToken {
     constructor(string memory _name, string memory _symbol, uint256 initialSupply) {
         name = _name;
         symbol = _symbol;
+        totalSupply = initialSupply;
         balanceOf[msg.sender] = initialSupply;
         
     }
