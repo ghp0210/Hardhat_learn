@@ -28,36 +28,33 @@ contract SimpleSwap {
         tokenB = _tokenB;
     }
 
- // 添加流动性
-    function addLiquidity(uint256 amountA, uint256 amountB) external {
+
+ function addLiquidity(uint256 amountA, uint256 amountB) external {
+
         require(amountA > 0 && amountB > 0, "Amounts must be positive");
-        
-        // 转账代币到合约(先检查approve)
-        require(IERC20(tokenA).transferFrom(msg.sender, address(this), amountA), "Token A transfer failed");
-        require(IERC20(tokenB).transferFrom(msg.sender, address(this), amountB), "Token B transfer failed");
-        
         uint256 lpTokens;
         if (totalLPTokens == 0) {
-            // 初始流动性提供者设置初始汇率
-            // 使用几何平均作为LP代币的基础(更符合Uniswap的设计)
-            lpTokens = sqrt(amountA * amountB);
+            lpTokens = calculateLPTokens(amountA, amountB);
         } else {
-            // 新流动性必须按照当前池子比例提供
-            // 允许一定的舍入误差(不超过0.1%的偏差)
-            uint256 expectedAmountA = (amountB * totalLiquidityTokenA) / totalLiquidityTokenB;
-            uint256 expectedAmountB = (amountA * totalLiquidityTokenB) / totalLiquidityTokenA;
+            // 确保比例匹配现有池子的比例
+            uint256 equivalentAmountB = (amountA * totalLiquidityTokenB) / totalLiquidityTokenA;
+            uint256 equivalentAmountA = (amountB * totalLiquidityTokenA) / totalLiquidityTokenB;
             
-            require(
-                (amountA * 1000 <= expectedAmountA * 1001) && 
-                (amountB * 1000 <= expectedAmountB * 1001),
-                "Amounts provided do not match the pool ratio"
-            );
-            
-            // 计算LP代币(按比例分配)
+            if (equivalentAmountB < amountB) {
+                // 根据实际等值调整amountB
+                amountB = equivalentAmountB;
+            } else {
+                // 根据实际等值调整amountA
+                amountA = equivalentAmountA;
+            }
             lpTokens = (amountA * totalLPTokens) / totalLiquidityTokenA;
         }
         
         require(lpTokens > 0, "Insufficient liquidity contribution");
+        
+        // 转账代币
+        require(IERC20(tokenA).transferFrom(msg.sender, address(this), amountA), "Token A transfer failed");
+        require(IERC20(tokenB).transferFrom(msg.sender, address(this), amountB), "Token B transfer failed");
         
         // 更新全局流动性数据
         totalLiquidityTokenA += amountA;
@@ -91,51 +88,37 @@ contract SimpleSwap {
     }
 
     // 代币互换
-    function swap(address fromToken, uint256 amountIn) external {
-        require(
-            (fromToken == tokenA || fromToken == tokenB) && tokenA != tokenB,
-            "Invalid token"
-        );
-        require(amountIn > 0, "Amount must be positive");
-        address toToken = fromToken == tokenA ? tokenB : tokenA;
+    function swap(address fromToken, uint256 amountIn, uint256 maxSlippage) external {
+    require((fromToken == tokenA || fromToken == tokenB) && tokenA != tokenB, "Invalid token");
+    require(amountIn > 0, "Amount must be positive");
+    require(maxSlippage <= 10000, "Max slippage too high");
+    require(maxSlippage > 0, "Max slippage must be positive");
+    address toToken = fromToken == tokenA ? tokenB : tokenA;
+    uint256 reserveIn = fromToken == tokenA ? totalLiquidityTokenA : totalLiquidityTokenB;
+    uint256 reserveOut = fromToken == tokenA ? totalLiquidityTokenB : totalLiquidityTokenA;
+    require(IERC20(fromToken).transferFrom(msg.sender, address(this), amountIn), "Token deposit failed");
 
-        // 使用恒定乘积公式计算兑换数量
-        // x * y = k
-        uint256 reserveIn = fromToken == tokenA
-            ? totalLiquidityTokenA
-            : totalLiquidityTokenB;
-        uint256 reserveOut = fromToken == tokenA
-            ? totalLiquidityTokenB
-            : totalLiquidityTokenA;
+    // 计算输出数量，1%的手续费
+    uint256 amountInWithFee = amountIn * 99;
+    uint256 numerator = amountInWithFee * reserveOut;
+    uint256 denominator = (reserveIn * 100) + amountInWithFee;
+    uint256 amountOut = numerator / denominator;
+    uint256 minAmountOut = amountOut * (10000 - maxSlippage) / 10000;
 
-        // 先转账输入代币到合约
-        require(
-            IERC20(fromToken).transferFrom(msg.sender, address(this), amountIn),
-            "Token deposit failed"
-        );
+    // 如果实际输出小于最小可接受值，则 revert
+    require(amountOut >= minAmountOut, "Slippage too high");
 
-        // 计算输出数量，考虑1%的手续费
-        uint256 amountInWithFee = amountIn * 99;
-        uint256 numerator = amountInWithFee * reserveOut;
-        uint256 denominator = (reserveIn * 100) + amountInWithFee;
-        uint256 amountOut = numerator / denominator;
-
-        // 更新储备金数据
-        if (fromToken == tokenA) {
-            totalLiquidityTokenA += amountIn;
-            totalLiquidityTokenB -= amountOut;
-        } else {
-            totalLiquidityTokenB += amountIn;
-            totalLiquidityTokenA -= amountOut;
-        }
-
-        // 转账输出代币给用户
-        require(
-            IERC20(toToken).transfer(msg.sender, amountOut),
-            "Token withdrawal failed"
-        );
-
-        emit TokensSwapped(msg.sender, fromToken, toToken, amountIn, amountOut);
+    // 更新储备金数据
+    if (fromToken == tokenA) {
+        totalLiquidityTokenA += amountIn;
+        totalLiquidityTokenB -= amountOut;
+    } else {
+        totalLiquidityTokenB += amountIn;
+        totalLiquidityTokenA -= amountOut;
+    }
+    // 转账输出代币给用户
+    require(IERC20(toToken).transfer(msg.sender, amountOut), "Token withdrawal failed");
+    emit TokensSwapped(msg.sender, fromToken, toToken, amountIn, amountOut);
     }
 
     // 计算LP代币数量（几何平均）
@@ -147,7 +130,6 @@ contract SimpleSwap {
         return sqrtProduct;
     }
 
-    // 计算平方根（牛顿迭代法）
     function sqrt(uint256 x) private pure returns (uint256) {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2;

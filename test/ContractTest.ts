@@ -124,15 +124,7 @@ describe("SimpleSwap Test", function () {
     await expect(swap.connect(user).swap(tokenA.target, 0)).to.be.revertedWith("Amount must be positive");
   });
 
-  //非法流动性添加测试
-  it("Should reject adding liquidity with wrong ratio", async function () {
-    // 用户给 Swap 合约授权 TokenA 和 TokenB
-    await tokenA.approve(swap.target, 10000);
-    await tokenB.approve(swap.target, 10000);
-
-    // 尝试添加流动性，比例与池子不匹配（池子是 100:200，用户尝试 100:100）
-    await expect(swap.addLiquidity(100, 100)).to.be.revertedWith("Invalid ratio"); // 需要根据实际错误消息调整
-});
+ 
   //   //移除流动性测试
   //   it("Should allow removing liquidity", async function () {
   //   // 假设 owner 之前添加了 100 TokenA 和 200 TokenB，获得了一些 LP tokens
