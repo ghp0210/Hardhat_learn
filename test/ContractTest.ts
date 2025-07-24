@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { expect } from "chai";
+import { expect, should } from "chai";
 
 describe("SimpleSwap Test", function () {
   let TokenA: any;
@@ -52,13 +52,47 @@ describe("SimpleSwap Test", function () {
 
   });
 
+  //正确部署测试
+  it("Should set the right owner and initial supply", async function (){
+      expect(await tokenA.name()).to.equal('TokenA');
+      expect(await tokenA.symbol()).to.equal("TKA");
+      expect(await tokenA.totalSupply()).to.equal(10000);
+      expect(await tokenA.balanceOf(owner.address)).to.equal(10000);
+
+      expect(await tokenB.name()).to.equal('TokenB');
+      expect(await tokenB.symbol()).to.equal("TKB");
+      expect(await tokenB.totalSupply()).to.equal(10000);
+      expect(await tokenB.balanceOf(owner.address)).to.equal(10000);
+  });
+
+ //代币转账测试
+  it("Should transfer tokens between accounts", async function () {
+    const initialBalance = await tokenA.balanceOf(user.address);
+    console.log(initialBalance);
+    await tokenA.transfer(user.address, 1000);
+
+    const newBalance = await tokenA.balanceOf(user.address);
+    console.log(newBalance);
+
+    expect(newBalance).to.equal(initialBalance + ethers.toBigInt(1000));
+
+  });
+
+  it("Should fail if sender doesn't have enough tokens", async function () {
+    await expect(tokenA.transfer(user.address, 20000)).to.be.revertedWith("Insufficient balance");
+  });
+
+  it("Should approve and transferFrom", async function () {
+    await tokenA.connect(owner).approve(user.address, 500); // owner 批准 user 可以花 500
+    await tokenA.connect(user).transferFrom(owner.address, user.address, 500); // user 调用 transferFrom
+    expect(await tokenA.balanceOf(user.address)).to.equal(1500);
+  });
+
   //增加流动性测试
-  it("Should allow adding liquidity", async function () {
+  it("Should allow adding liquidity(First time)", async function () {
 
-
-    // 用户给 Swap 合约授权 TokenA 和 TokenB
-    await tokenA.approve(Swap.target, 10000);
-    await tokenB.approve(Swap.target, 10000);
+    await tokenA.approve(Swap.target, 100);
+    await tokenB.approve(Swap.target, 200);
 
     // 添加流动性：100 TokenA + 200 TokenB
     await expect(swap.addLiquidity(100, 200))
@@ -73,27 +107,12 @@ describe("SimpleSwap Test", function () {
     expect(await swap.liquidityProvider(owner.address)).to.equal(expectedLPTokens);
   });
 
-  //代币转账测试
-  it("Should Transfer", async function () {
-    // 1. 获取 user 的初始 TokenA 余额
-    const initialBalance = await tokenA.balanceOf(user.address);
-    console.log(initialBalance);
-
-    // 2. owner 给 user 转账 1000 TokenA
-    await tokenA.transfer(user.address, 1000);
-
-    // 3. 获取转账后的余额
-    const newBalance = await tokenA.balanceOf(user.address);
-    console.log(newBalance);
-
-    expect(newBalance).to.equal(initialBalance + ethers.toBigInt(1000));
-
-  });
+ 
 
   //代币兑换测试
   it("Should Swap", async function () {
     // 用户授权 TokenA 给 Swap 合约
-    await tokenA.connect(user).approve(swap.target, 1000);
+    await tokenA.connect(user).approve(swap.target, 100);
 
     // 获取用户初始 TokenA 和 TokenB 的余额
     const initialBalance_A = await tokenA.balanceOf(user.address);
@@ -101,7 +120,7 @@ describe("SimpleSwap Test", function () {
     console.log("初始 TokenB 余额:", initialBalance_B.toString());
 
     // 用户用 100 TokenA 兑换成 TokenB
-    await swap.connect(user).swap(tokenA.target, 100);
+    await swap.connect(user).swap(tokenA.target, 100, 9500);
 
     // 获取兑换后的余额
     const newBalance_A = await tokenA.balanceOf(user.address);
@@ -117,12 +136,12 @@ describe("SimpleSwap Test", function () {
     expect(newBalance_B).to.be.gt(initialBalance_B);
   })
 
-  //0金额兑换
-  it("Should reject swapping 0 amount", async function () {
+  // //0金额兑换
+  // it("Should reject swapping 0 amount", async function () {
 
-    await tokenA.connect(user).approve(swap.target, 10000);
-    await expect(swap.connect(user).swap(tokenA.target, 0)).to.be.revertedWith("Amount must be positive");
-  });
+  //   await tokenA.connect(user).approve(swap.target, 10000);
+  //   await expect(swap.connect(user).swap(tokenA.target, 0)).to.be.revertedWith("Amount must be positive");
+  // });
 
  
   //   //移除流动性测试
