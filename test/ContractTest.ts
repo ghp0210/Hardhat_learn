@@ -17,7 +17,6 @@ describe("SimpleSwap Test", function () {
 
 
     [owner, user] = await ethers.getSigners();
-    console.log("已获取签名者");  // 新增的调试输出
 
     // 部署 TokenA 
     const TokenFactory = await ethers.getContractFactory("MyToken");
@@ -47,12 +46,11 @@ describe("SimpleSwap Test", function () {
     tokenA = TokenA.connect(owner);
     tokenB = TokenB.connect(owner);
     swap = Swap.connect(owner);
-
-    console.log("所有合约部署完成");  // 新增的调试输出
+    console.log("所有合约部署完成");  
 
   });
 
-  //正确部署测试
+  //Test1: 代币正确部署测试
   it("Should set the right owner and initial supply", async function (){
       expect(await tokenA.name()).to.equal('TokenA');
       expect(await tokenA.symbol()).to.equal("TKA");
@@ -65,104 +63,121 @@ describe("SimpleSwap Test", function () {
       expect(await tokenB.balanceOf(owner.address)).to.equal(10000);
   });
 
- //代币转账测试
+ //Test2: 代币转账测试 owner->user:1000 tokenA
   it("Should transfer tokens between accounts", async function () {
-    const initialBalance = await tokenA.balanceOf(user.address);
-    console.log(initialBalance);
+    const user_initialBalance = await tokenA.balanceOf(user.address);
+    console.log('user TokenA余额(初始):',user_initialBalance.toString());
     await tokenA.transfer(user.address, 1000);
-
     const newBalance = await tokenA.balanceOf(user.address);
-    console.log(newBalance);
-
-    expect(newBalance).to.equal(initialBalance + ethers.toBigInt(1000));
-
+    console.log('user TokenA余额(转账后):',newBalance.toString());
+    //user tokenA:1000
+    expect(newBalance).to.equal(user_initialBalance + ethers.toBigInt(1000));
+    const owner_Balance = await tokenA.balanceOf(owner.address);
+    //owner tokenA:9000
+    expect(owner_Balance).to.equal(ethers.toBigInt(9000));
   });
 
+  //Test3: 转账代币余额不足测试
   it("Should fail if sender doesn't have enough tokens", async function () {
-    await expect(tokenA.transfer(user.address, 20000)).to.be.revertedWith("Insufficient balance");
+    await expect(tokenA.transfer(user.address, 10000)).to.be.revertedWith("Insufficient balance");
   });
 
+  //Test4: 授权与转账测试
   it("Should approve and transferFrom", async function () {
     await tokenA.connect(owner).approve(user.address, 500); // owner 批准 user 可以花 500
-    await tokenA.connect(user).transferFrom(owner.address, user.address, 500); // user 调用 transferFrom
+    await expect(tokenA.connect(user).transferFrom(owner.address, user.address, 501)).to.be.revertedWith("Allowance exceeded"); 
+    await tokenA.connect(user).transferFrom(owner.address, user.address, 500);
+    //user tokenA:8500
+    expect(await tokenA.balanceOf(owner.address)).to.equal(8500);
+    //owner tokenA:1500
     expect(await tokenA.balanceOf(user.address)).to.equal(1500);
   });
 
-  //增加流动性测试
+  //Test5: 增加流动性测试
   it("Should allow adding liquidity(First time)", async function () {
 
-    await tokenA.approve(Swap.target, 100);
-    await tokenB.approve(Swap.target, 200);
+    await tokenA.approve(Swap.target, 1000);
+    await tokenB.approve(Swap.target, 2000);
 
-    // 添加流动性：100 TokenA + 200 TokenB
-    await expect(swap.addLiquidity(100, 200))
-      .to.emit(swap, "LiquidityAdded")
-      .withArgs(owner.address, 100, 200, ethers.toBigInt(141)); // LP tokens 简化为固定值
-    const expectedLPTokens = ethers.toBigInt(141);
-    // 检查总流动性
-    expect(await swap.totalLiquidityTokenA()).to.equal(ethers.toBigInt(100));
-    expect(await swap.totalLiquidityTokenB()).to.equal(ethers.toBigInt(200));
+    // 添加流动性：1000 TokenA + 2000 TokenB
+    await expect(swap.addLiquidity(1000, 2000)).to.emit(swap, "LiquidityAdded").withArgs(owner.address, 1000, 2000, ethers.toBigInt(1414)); 
+    
+    //检查余额 user tokenA:7500 tokenB:8000
+    expect(await tokenA.balanceOf(owner.address)).to.equal(ethers.toBigInt(7500));
+    expect(await tokenB.balanceOf(owner.address)).to.equal(ethers.toBigInt(8000));
+   
+    // 检查总流动性 totalLiquidityTokenA:1000 totalLiquidityTokenB:2000
+    expect(await swap.totalLiquidityTokenA()).to.equal(ethers.toBigInt(1000));
+    expect(await swap.totalLiquidityTokenB()).to.equal(ethers.toBigInt(2000));
     expect(await swap.totalLPTokens()).to.be.gt(0); // 至少有 LP tokens
-    // 检查流动性提供者的LP tokens
-    expect(await swap.liquidityProvider(owner.address)).to.equal(expectedLPTokens);
+   
+    // 检查流动性提供者的LPtokens 1414
+    expect(await swap.liquidityProvider(owner.address)).to.equal(ethers.toBigInt(1414));
+
   });
 
- 
 
-  //代币兑换测试
-  it("Should Swap", async function () {
-    // 用户授权 TokenA 给 Swap 合约
+  //Test6: 代币兑换测试 tokenA->tokenB
+  it("Should Swap tokenB", async function () {
     await tokenA.connect(user).approve(swap.target, 100);
-
-    // 获取用户初始 TokenA 和 TokenB 的余额
     const initialBalance_A = await tokenA.balanceOf(user.address);
     const initialBalance_B = await tokenB.balanceOf(user.address);
     console.log("初始 TokenB 余额:", initialBalance_B.toString());
-
-    // 用户用 100 TokenA 兑换成 TokenB
+    
     await swap.connect(user).swap(tokenA.target, 100, 9500);
 
     // 获取兑换后的余额
     const newBalance_A = await tokenA.balanceOf(user.address);
     const newBalance_B = await tokenB.balanceOf(user.address);
 
+    expect(newBalance_A).to.equal(ethers.toBigInt(1400));
+    expect(newBalance_B).to.equal(ethers.toBigInt(180));
     console.log("兑换后 TokenA 余额:", newBalance_A.toString());
     console.log("兑换后 TokenB 余额:", newBalance_B.toString());
 
-    // 验证 TokenA 减少（考虑授权转账）
-    expect(newBalance_A).to.be.lt(initialBalance_A);
 
-    // 验证 TokenB 增加
-    expect(newBalance_B).to.be.gt(initialBalance_B);
-  })
+  });
 
-  // //0金额兑换
-  // it("Should reject swapping 0 amount", async function () {
+  //Test7: 0金额兑换
+  it("Should reject swapping 0 amount", async function () {
+    //await tokenA.connect(user).approve(swap.target, 10);
+    await expect(swap.connect(user).swap(tokenA.target, 0, 9500)).to.be.revertedWith("Amount must be positive");
+  });
+  
+  //Test8: 用户添加流动性
+  it("Should allow adding liquidity multiple times", async function (){
+    await tokenA.connect(user).approve(Swap.target, 50);
+    await tokenB.connect(user).approve(Swap.target, 100);
+  
+    const balanceA = await swap.totalLiquidityTokenA();
+    const balanceB = await swap.totalLiquidityTokenB();
 
-  //   await tokenA.connect(user).approve(swap.target, 10000);
-  //   await expect(swap.connect(user).swap(tokenA.target, 0)).to.be.revertedWith("Amount must be positive");
-  // });
+    // 添加流动性：50 TokenA + 100 TokenB
+    await expect(swap.connect(user).addLiquidity(50, 100)).to.emit(swap, "LiquidityAdded").withArgs(user.address, 50, 82, ethers.toBigInt(64)); // LP tokens 简化为固定值
+    
+    // 检查总流动性
+    expect(await swap.totalLiquidityTokenA()).to.equal(ethers.toBigInt(1150));
+    expect(await swap.totalLiquidityTokenB()).to.equal(ethers.toBigInt(1902));
+    expect(await swap.totalLPTokens()).to.be.gt(0); // 至少有 LP tokens
+    // 检查流动性提供者的LP tokens
+    expect(await swap.liquidityProvider(user.address)).to.equal(64);
+    expect(await swap.totalLPTokens()).to.equal(1478);
+    //用户余额检查
+    expect(await TokenA.balanceOf(user.address)).to.equal(1350);
+    expect(await TokenB.balanceOf(user.address)).to.equal(98);
+  });
 
- 
-  //   //移除流动性测试
-  //   it("Should allow removing liquidity", async function () {
-  //   // 假设 owner 之前添加了 100 TokenA 和 200 TokenB，获得了一些 LP tokens
-  //   const lpTokensBefore = await swap.liquidityProvider(owner.address);
-  //   console.log("流动性",lpTokensBefore)
-  //   // 移除所有流动性
-  //   await expect(swap.connect(owner).removeLiquidity(lpTokensBefore))
-  //     .to.emit(swap, "LiquidityRemoved")
-  //     .withArgs(owner.address, ethers.toBigInt(200), ethers.toBigInt(101), lpTokensBefore);
+  //Test9:移除流动性测试
+  it("Should allow removing liquidity", async function () {
+    await expect(swap.connect(user).removeLiquidity(32)).to.emit(swap, "LiquidityRemoved").withArgs(user.address, ethers.toBigInt(24), ethers.toBigInt(41), ethers.toBigInt(32));
+   
+    expect(await swap.totalLiquidityTokenA()).to.equal(ethers.toBigInt(1126));
+    expect(await swap.totalLiquidityTokenB()).to.equal(ethers.toBigInt(1861));
+    expect(await swap.liquidityProvider(user.address)).to.equal(32);
+    expect(await swap.totalLPTokens()).to.equal(1446);
 
-  //   // 检查池子是否清空
-  //   expect(await swap.totalLiquidityTokenA()).to.equal(ethers.toBigInt(0));
-  //   expect(await swap.totalLiquidityTokenB()).to.equal(ethers.toBigInt(0));
-  //   expect(await swap.totalLPTokens()).to.equal(0);
-
-  //   // 检查 owner 是否收到了 TokenA 和 TokenB
-  //   const ownerTokenABalance = await tokenA.balanceOf(owner.address);
-  //   const ownerTokenBBalance = await tokenB.balanceOf(owner.address);
-  //   expect(ownerTokenABalance).to.be.gt(0);
-  //   expect(ownerTokenBBalance).to.be.gt(0);
-  // });
+    expect(await TokenA.balanceOf(user.address)).to.equal(ethers.toBigInt(1374));
+    expect(await TokenB.balanceOf(user.address)).to.equal(ethers.toBigInt(139));
+    
+  });
 });

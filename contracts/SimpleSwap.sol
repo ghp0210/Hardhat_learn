@@ -11,11 +11,10 @@ contract SimpleSwap {
     address public tokenA;
     address public tokenB;
 
-    // 池子中两种代币的总量
+
     uint256 public totalLiquidityTokenA = 0;
     uint256 public totalLiquidityTokenB = 0;
 
-    // 流动性代币总量
     uint256 public totalLPTokens = 0;
 
     // 事件定义
@@ -41,10 +40,8 @@ contract SimpleSwap {
             uint256 equivalentAmountA = (amountB * totalLiquidityTokenA) / totalLiquidityTokenB;
             
             if (equivalentAmountB < amountB) {
-                // 根据实际等值调整amountB
                 amountB = equivalentAmountB;
             } else {
-                // 根据实际等值调整amountA
                 amountA = equivalentAmountA;
             }
             lpTokens = (amountA * totalLPTokens) / totalLiquidityTokenA;
