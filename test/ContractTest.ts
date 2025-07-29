@@ -15,23 +15,22 @@ describe("SimpleSwap Test", function () {
 
   before(async function () {
 
-
     [owner, user] = await ethers.getSigners();
 
-    // 部署 TokenA 
+    //TokenA 
     const TokenFactory = await ethers.getContractFactory("MyToken");
     TokenA = await TokenFactory.deploy("TokenA", "TKA", 10000);
     await TokenA.waitForDeployment();
     const tokenAAddress = await TokenA.getAddress();
     console.log("TokenA 已部署到:", tokenAAddress);
 
-    // 部署 TokenB (SecondToken)
+    //TokenB
     TokenB = await TokenFactory.deploy("TokenB","TKB",10000);
     await TokenB.waitForDeployment();
     const tokenBAddress = await TokenB.getAddress();
     console.log("TokenB 已部署到:", tokenBAddress);
 
-    // 部署 SimpleSwap，传入 TokenA 和 TokenB 的地址
+    //SimpleSwap
     const SwapFactory = await ethers.getContractFactory("SimpleSwap");
     Swap = await SwapFactory.deploy(tokenAAddress, tokenBAddress);
     await Swap.waitForDeployment();
